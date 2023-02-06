@@ -41,7 +41,7 @@ unicode_symbols = {
     "left_right_arrow": console.left_right_arrow,
     "bold": console.bold,
     "bold_reset": console.reset,
-    "memory": console.circled_m,
+    "memory": "M",
     "synchronised": console.lightning_bolt,
     "sequence_with_memory": "{-}",
     "selector_with_memory": "{o}",
@@ -409,6 +409,7 @@ def dot_tree(
     collapse_decorators: bool = False,
     with_blackboard_variables: bool = False,
     with_qualified_names: bool = False,
+    static: bool = True,
 ) -> pydot.Dot:
     """
     Paint your tree on a pydot graph.
@@ -421,7 +422,7 @@ def dot_tree(
         collapse_decorators (optional): only show the decorator (not the child), defaults to False
         with_blackboard_variables (optional): add nodes for the blackboard variables
         with_qualified_names (optional): print the class information for each behaviour in each node, defaults to False
-
+		static (optional): if False, it prints the tree with the color code depending on the running status
     Returns:
         pydot.Dot: graph
 
@@ -432,16 +433,24 @@ def dot_tree(
             print("{}".format(py_trees.display.dot_graph(root).to_string()))
     """
 
-    def get_node_attributes(node: behaviour.Behaviour) -> typing.Tuple[str, str, str]:
+    def get_node_attributes(node: behaviour.Behaviour, static=True) -> typing.Tuple[str, str, str]:
         blackbox_font_colours = {
             common.BlackBoxLevel.DETAIL: "dodgerblue",
             common.BlackBoxLevel.COMPONENT: "lawngreen",
             common.BlackBoxLevel.BIG_PICTURE: "white",
         }
         if isinstance(node, composites.Selector):
-            attributes = ("octagon", "cyan", "black")  # octagon
+            if not static:
+                color_ = get_status_color(node)
+                attributes = ("octagon", color_, "black")
+            else:
+                attributes = ("octagon", "cyan", "black")  # octagon
         elif isinstance(node, composites.Sequence):
-            attributes = ("box", "orange", "black")
+            if not static:
+                color_ = get_status_color(node)
+                attributes = ("box", color_, "black")
+            else:
+                attributes = ("box", "orange", "black")
         elif isinstance(node, composites.Parallel):
             attributes = ("parallelogram", "gold", "black")
         elif isinstance(node, decorators.Decorator):
@@ -459,6 +468,21 @@ def dot_tree(
             # it's a blackboard client, not a behaviour, just pass
             pass
         return attributes
+
+    def get_status_color(node):
+        """
+        Return a color based on the node state.
+        """
+        if node.status.value == 'SUCCESS':
+            color = 'green'
+        elif node.status.value == 'FAILURE':
+            color = 'red'
+        elif node.status.value == 'RUNNING':
+            color = 'yellow'
+        else:  # INVALID
+            color = 'lightgray'
+
+        return color
 
     def get_node_label(node_name: str, behaviour: behaviour.Behaviour) -> str:
         """
@@ -515,7 +539,7 @@ def dot_tree(
     )  # splines='curved' is buggy on 16.04, but would be nice to have
     graph.set_node_defaults(fontname="times-roman")
     graph.set_edge_defaults(fontname="times-roman")
-    (node_shape, node_colour, node_font_colour) = get_node_attributes(root)
+    (node_shape, node_colour, node_font_colour) = get_node_attributes(root, static)
     node_root = pydot.Node(
         name=root.name,
         label=get_node_label(root.name, root),
@@ -534,23 +558,25 @@ def dot_tree(
         root_dot_name: str,
         visibility_level: common.VisibilityLevel,
         collapse_decorators: bool,
+        static: bool,
     ) -> None:
         if isinstance(root, decorators.Decorator) and collapse_decorators:
             return
         if visibility_level < root.blackbox_level:
             node_names = []
             for c in root.children:
-                (node_shape, node_colour, node_font_colour) = get_node_attributes(c)
+                (node_shape, node_colour, node_font_colour) = get_node_attributes(c, static)
                 node_name = c.name
+                node_label = node_name
                 while node_name in behaviour_id_name_map.values():
-                    node_name += "*"
+                    node_name += " "
                 behaviour_id_name_map[c.id] = node_name
                 # Node attributes can be found on page 5 of
                 #    https://graphviz.gitlab.io/_pages/pdf/dot.1.pdf
                 # Attributes that may be useful: tooltip, xlabel
                 node = pydot.Node(
                     name=node_name,
-                    label=get_node_label(node_name, c),
+                    label=get_node_label(node_label, c),
                     shape=node_shape,
                     style="filled",
                     fillcolor=node_colour,
@@ -563,11 +589,11 @@ def dot_tree(
                 graph.add_edge(edge)
                 if c.children != []:
                     add_children_and_edges(
-                        c, node, node_name, visibility_level, collapse_decorators
+                        c, node, node_name, visibility_level, collapse_decorators, static
                     )
 
     add_children_and_edges(
-        root, node_root, root.name, visibility_level, collapse_decorators
+        root, node_root, root.name, visibility_level, collapse_decorators, static
     )
 
     def create_blackboard_client_node(blackboard_client_name: str) -> pydot.Node:
@@ -693,6 +719,7 @@ def render_dot_tree(
     target_directory: typing.Optional[str] = None,
     with_blackboard_variables: bool = False,
     with_qualified_names: bool = False,
+    static: bool = True
 ) -> typing.Dict[str, str]:
     """
     Render the dot tree to dot, svg, png. files.
@@ -708,7 +735,7 @@ def render_dot_tree(
         target_directory: default is to use the current working directory, set this to redirect elsewhere
         with_blackboard_variables: add nodes for the blackboard variables
         with_qualified_names: print the class names of each behaviour in the dot node
-
+        static (optional): if False, it prints the tree with the color code depending on the running status
     Example:
         Render a simple tree to dot/svg/png file:
 
@@ -738,7 +765,7 @@ def render_dot_tree(
         visibility_level,
         collapse_decorators,
         with_blackboard_variables=with_blackboard_variables,
-        with_qualified_names=with_qualified_names,
+        with_qualified_names=with_qualified_names, static=static
     )
     filename_wo_extension_to_convert = root.name if name is None else name
     filename_wo_extension = utilities.get_valid_filename(
@@ -746,7 +773,6 @@ def render_dot_tree(
     )
     filenames: typing.Dict[str, str] = {}
     for extension, writer in {
-        "dot": graph.write,
         "png": graph.write_png,
         "svg": graph.write_svg,
     }.items():
