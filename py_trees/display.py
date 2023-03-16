@@ -456,7 +456,7 @@ def dot_tree(
         elif isinstance(node, decorators.Decorator):
             attributes = ("ellipse", "ghostwhite", "black")
         else:
-            attributes = ("ellipse", "gray", "black")
+            attributes = ("ellipse", "lightgray", "black")
         try:
             if node.blackbox_level != common.BlackBoxLevel.NOT_A_BLACKBOX:
                 attributes = (
@@ -527,7 +527,7 @@ def dot_tree(
             node_label += f"\n({utilities.get_fully_qualified_name(behaviour)})"
         return node_label
 
-    fontsize = 9
+    fontsize = 12
     blackboard_colour = "blue"  # "dimgray"
     graph = pydot.Dot(graph_type="digraph", ordering="out")
     graph.set_name(
