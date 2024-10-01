@@ -527,7 +527,7 @@ def dot_tree(
             node_label += f"\n({utilities.get_fully_qualified_name(behaviour)})"
         return node_label
 
-    fontsize = 12
+    fontsize = 9
     blackboard_colour = "blue"  # "dimgray"
     graph = pydot.Dot(graph_type="digraph", ordering="out")
     graph.set_name(
